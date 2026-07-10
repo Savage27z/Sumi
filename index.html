@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>SUMI — a sumi-e nightmare</title>
 <style>
   :root{
@@ -12,7 +12,7 @@
     --accent:#9c6b6b;
   }
   *{margin:0;padding:0;box-sizing:border-box;}
-  html,body{width:100%;height:100%;overflow:hidden;background:#07080d;}
+  html,body{width:100%;height:100%;overflow:hidden;background:#07080d;touch-action:none;overscroll-behavior:none;}
   body{font-family:'Segoe Print','Bradley Hand','Comic Sans MS','Chalkboard SE','Patrick Hand',cursive;color:var(--paper);}
   canvas#gl{position:fixed;inset:0;z-index:0;display:block;}
 
@@ -78,6 +78,28 @@
   #win h1{font-size:min(11vw,84px);color:#efe9da;}
   #paused{background:rgba(5,6,10,.86);}
   #tip{position:fixed;bottom:12px;width:100%;text-align:center;font-size:12px;opacity:.4;z-index:11;pointer-events:none;}
+
+  /* ------- touch controls ------- */
+  .touchOnly{display:none;}
+  body.touch .touchOnly{display:flex;}
+  #joyBase{position:absolute;left:26px;bottom:78px;width:124px;height:124px;
+    border:2.5px solid rgba(232,226,210,.45);
+    border-radius:48% 52% 50% 50%/52% 48% 52% 48%;
+    background:rgba(14,15,22,.35);}
+  #joyKnob{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;
+    border-radius:50% 45% 55% 50%/48% 52% 46% 54%;
+    background:rgba(232,226,210,.5);box-shadow:1px 2px 0 rgba(0,0,0,.5);}
+  .tbtn{position:absolute;right:24px;width:78px;height:78px;
+    border:2.5px solid var(--paper);
+    border-radius:255px 18px 225px 18px/18px 225px 18px 255px;
+    background:rgba(14,15,22,.55);color:var(--paper);font-size:15px;
+    align-items:center;justify-content:center;pointer-events:auto;user-select:none;
+    text-shadow:1px 1px 0 #000;}
+  .tbtn.held{background:var(--paper);color:var(--ink);}
+  #btnSprintT{bottom:126px;}
+  #btnLightT{bottom:30px;}
+  body.touch #stamWrap{left:172px;bottom:26px;width:140px;}
+  body.touch #prompt{pointer-events:auto;padding:.8em 1.2em;}
 </style>
 </head>
 <body>
@@ -98,6 +120,9 @@
   <div id="prompt" class="bubble wobble">[E] take the page</div>
   <div id="note" class="bubble"></div>
   <div id="stareWarn" class="bubble">don't look at him</div>
+  <div id="joyBase" class="touchOnly"><div id="joyKnob"></div></div>
+  <div id="btnSprintT" class="tbtn touchOnly">run</div>
+  <div id="btnLightT" class="tbtn touchOnly">light</div>
 </div>
 
 <div id="menu" class="panel">
@@ -1324,6 +1349,59 @@ addEventListener('keydown',e=>{
 });
 addEventListener('mousedown',()=>{if(G.state==='intro')endIntro();if(AC&&AC.state==='suspended')AC.resume();});
 
+/* ---- touch ---- */
+const IS_TOUCH=('ontouchstart' in window)||matchMedia('(pointer:coarse)').matches;
+const touch={mx:0,mz:0,sprint:false,joyId:null,lookId:null,lastX:0,lastY:0};
+if(IS_TOUCH){
+  document.body.classList.add('touch');
+  const joyBase=$('joyBase'),joyKnob=$('joyKnob');
+  const knob=(dx,dy)=>{joyKnob.style.transform=`translate(${dx}px,${dy}px)`;};
+  const joyCenter=()=>{const r=joyBase.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2};};
+  const updateJoy=t=>{
+    const c=joyCenter();
+    let dx=t.clientX-c.x,dy=t.clientY-c.y;
+    const m=Math.hypot(dx,dy);
+    if(m>52){dx*=52/m;dy*=52/m;}
+    knob(dx,dy);
+    touch.mx=dx/52;touch.mz=dy/52;
+  };
+  document.addEventListener('touchstart',e=>{
+    if(AC&&AC.state==='suspended')AC.resume();
+    if(G.state==='intro'){endIntro();return;}
+    if(G.state!=='playing')return; // menus take normal taps
+    for(const t of e.changedTouches){
+      if(t.target.closest&&t.target.closest('.tbtn,#prompt'))continue;
+      if(t.clientX<innerWidth*.45&&touch.joyId===null){touch.joyId=t.identifier;updateJoy(t);}
+      else if(touch.lookId===null){touch.lookId=t.identifier;touch.lastX=t.clientX;touch.lastY=t.clientY;}
+    }
+  },{passive:true});
+  document.addEventListener('touchmove',e=>{
+    if(G.state!=='playing')return;
+    e.preventDefault();
+    for(const t of e.changedTouches){
+      if(t.identifier===touch.joyId)updateJoy(t);
+      else if(t.identifier===touch.lookId){
+        G.yaw-=(t.clientX-touch.lastX)*.0048;
+        G.pitch=clamp(G.pitch-(t.clientY-touch.lastY)*.0048,-1.45,1.45);
+        touch.lastX=t.clientX;touch.lastY=t.clientY;
+      }
+    }
+  },{passive:false});
+  const endTouch=e=>{
+    for(const t of e.changedTouches){
+      if(t.identifier===touch.joyId){touch.joyId=null;touch.mx=0;touch.mz=0;knob(0,0);}
+      if(t.identifier===touch.lookId)touch.lookId=null;
+    }
+  };
+  document.addEventListener('touchend',endTouch);
+  document.addEventListener('touchcancel',endTouch);
+  const bs=$('btnSprintT'),bl=$('btnLightT');
+  bs.addEventListener('touchstart',e=>{e.preventDefault();touch.sprint=true;bs.classList.add('held');},{passive:false});
+  bs.addEventListener('touchend',()=>{touch.sprint=false;bs.classList.remove('held');});
+  bl.addEventListener('touchstart',e=>{e.preventDefault();if(G.state==='playing')flashOn=!flashOn;},{passive:false});
+  $('prompt').addEventListener('touchstart',e=>{e.preventDefault();tryCollect();},{passive:false});
+}
+
 /* ---- gamepad ---- */
 const pad={mx:0,mz:0,sprint:false,prev:{}};
 function pollGamepad(dt){
@@ -1370,6 +1448,7 @@ document.addEventListener('pointerlockchange',()=>{
   }
 });
 function lockPointer(){
+  if(IS_TOUCH)return; // fingers don't need locking
   const p=document.body.requestPointerLock&&document.body.requestPointerLock();
   if(p&&p.catch)p.catch(()=>{});
 }
@@ -1703,9 +1782,9 @@ function update(dt){
   if(keys.KeyS||keys.ArrowDown)mz+=1;
   if(keys.KeyA||keys.ArrowLeft)mx-=1;
   if(keys.KeyD||keys.ArrowRight)mx+=1;
-  mx+=pad.mx;mz+=pad.mz;
+  mx+=pad.mx+touch.mx;mz+=pad.mz+touch.mz;
   const moving=(mx||mz);
-  const wantSprint=(keys.ShiftLeft||keys.ShiftRight||pad.sprint)&&moving&&!G.exhausted;
+  const wantSprint=(keys.ShiftLeft||keys.ShiftRight||pad.sprint||touch.sprint)&&moving&&!G.exhausted;
   if(wantSprint){G.stamina-=d.drain*dt;if(G.stamina<=0){G.stamina=0;G.exhausted=true;}}
   else{G.stamina+=d.regen*dt;if(G.stamina>d.stamMax)G.stamina=d.stamMax;if(G.exhausted&&G.stamina>d.stamMax*.35)G.exhausted=false;}
   const speed=wantSprint?7.0:(G.exhausted?3.0:4.3);
