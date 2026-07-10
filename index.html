@@ -62,6 +62,7 @@
   }
   .btn:hover{background:var(--paper);color:var(--ink);transform:rotate(-1deg) scale(1.04);}
   .btn small{display:block;font-size:12px;opacity:.7;margin-top:2px;}
+  .btn .best{display:block;font-size:11px;color:#a9c3a9;opacity:.85;margin-top:1px;font-style:italic;}
   .btn:hover small{opacity:.85;}
   #menu .controls{font-size:14px;opacity:.65;line-height:1.9;margin-top:12px;}
   #enso{position:absolute;left:50%;top:50%;transform:translate(-50%,-54%);opacity:.5;pointer-events:none;}
@@ -1048,6 +1049,33 @@ function showNote(txt,dur=4.5){
 }
 
 /* =========================================================
+   persistent bests (localStorage)
+========================================================= */
+function loadBests(){try{return JSON.parse(localStorage.getItem('sumiBests'))||{};}catch(e){return{};}}
+function saveBests(b){try{localStorage.setItem('sumiBests',JSON.stringify(b));}catch(e){}}
+const fmtTime=s=>`${Math.floor(s/60)}m ${Math.round(s%60)}s`;
+function recordResult(diffKey,won,secs,pages){
+  const b=loadBests();
+  const e=b[diffKey]||(b[diffKey]={});
+  let line='';
+  if(won&&(e.time===undefined||secs<e.time)){e.time=secs;line='a new fastest escape!';}
+  else if(!won&&(e.pages===undefined||pages>e.pages)){e.pages=pages;line='your deepest run yet.';}
+  saveBests(b);
+  return line;
+}
+function updateMenuBests(){
+  const b=loadBests();
+  document.querySelectorAll('#menu .btn').forEach(btn=>{
+    let span=btn.querySelector('.best');
+    const e=b[btn.dataset.diff];
+    if(!e){if(span)span.remove();return;}
+    if(!span){span=document.createElement('span');span.className='best';btn.appendChild(span);}
+    span.textContent=e.time!==undefined?`best escape: ${fmtTime(e.time)}`:`deepest: ${e.pages}/8 pages`;
+  });
+}
+updateMenuBests();
+
+/* =========================================================
    difficulty
 ========================================================= */
 const DIFFS={
@@ -1271,7 +1299,9 @@ function die(){
 function showDead(){
   G.state='dead';
   const secs=Math.round((performance.now()-G.startTime)/1000);
-  $('deadStats').innerHTML=`pages found: ${G.pages} / 8<br>survived ${Math.floor(secs/60)}m ${secs%60}s — ${G.diff.label}`;
+  const bestLine=recordResult(G.diffKey,false,secs,G.pages);
+  $('deadStats').innerHTML=`pages found: ${G.pages} / 8<br>survived ${fmtTime(secs)} — ${G.diff.label}`+(bestLine?`<br><i>${bestLine}</i>`:'');
+  updateMenuBests();
   $('dead').style.display='flex';
   $('hud').style.display='none';
   $('crosshair').style.display='none';
@@ -1283,7 +1313,9 @@ function showDead(){
 function showWin(){
   G.state='win';
   const secs=Math.round((performance.now()-G.startTime)/1000);
-  $('winStats').innerHTML=`all 8 pages recovered in ${Math.floor(secs/60)}m ${secs%60}s<br>difficulty: ${G.diff.label}<br><br>you stepped out of the painting.`;
+  const bestLine=recordResult(G.diffKey,true,secs,8);
+  $('winStats').innerHTML=`all 8 pages recovered in ${fmtTime(secs)}<br>difficulty: ${G.diff.label}`+(bestLine?`<br><i>${bestLine}</i>`:'')+`<br><br>you stepped out of the painting.`;
+  updateMenuBests();
   $('win').style.display='flex';
   $('hud').style.display='none';
   $('crosshair').style.display='none';
