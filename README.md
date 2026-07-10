@@ -9,9 +9,10 @@ the only network dependency is the Three.js module loaded from CDN.
 
 ## The game
 
-You are lost inside an ink painting. **Collect the 8 hand-drawn pages** scattered across
-the forest's landmarks — a torii gate, a stone lantern, an old well, a twisted great tree,
-a rock circle, a fallen log, a small shrine, and a row of graves.
+You are lost inside an ink painting. **Collect the 8 hand-drawn pages** hidden at 8 of
+the forest's 12 landmarks (different every run) — a torii gate, a stone lantern, an old
+well, a twisted great tree, a rock circle, a fallen log, a small shrine, a row of graves,
+a temple bell, a kakashi scarecrow, a shimenawa-roped rock, and a dead bamboo grove.
 
 Something ink-black wearing a **white noh mask** lives between the trees.
 
@@ -19,19 +20,36 @@ Something ink-black wearing a **white noh mask** lives between the trees.
 - **Looking at it feeds the ink**: screen static, ink-splatter vignette, and audio
   distortion build while it is in view. Stare too long and it takes you — jumpscare, death.
 - It never moves while watched. It drifts toward you when it is not.
+- **It listens.** Sprinting is loud; loud players are found sooner and closer.
+- When it stands close behind you, you will hear it breathing. Turn around slowly.
+- On the last two pages it stops teleporting and **hunts** — break line of sight to
+  make it melt back into the ink.
 - If it reaches you, it takes you anyway.
 
-Collect all 8 pages to step out of the painting at dawn.
+The forest plays tricks: distant koto phrases nobody is playing, creaking trees,
+fireflies that suddenly go out, a flashlight that falters — and glimpses of a figure
+at the very edge of your vision that is gone before you can turn.
+
+The 8th page opens a **gate of light** far across the forest. It chases. Run.
+
+Your fastest escape and deepest run per difficulty are remembered (localStorage).
 
 ## Controls
 
-| Key | Action |
+| Keyboard / mouse | Action |
 |---|---|
 | `WASD` / arrows | walk |
-| `SHIFT` | sprint (drains stamina) |
+| `SHIFT` | sprint (drains stamina, makes noise) |
 | mouse | look |
 | `E` | take a page |
 | `F` | flashlight on/off |
+| any key | skip the intro |
+
+**Gamepad** (standard mapping): left stick walk · right stick look · triggers/L3
+sprint · `A` take page / confirm menus · `X` flashlight · `Start` pause.
+
+**Touch**: left-thumb ink joystick · drag right half to look · hold **run** ·
+tap **light** · tap the speech bubble to take a page.
 
 ## Difficulty
 
