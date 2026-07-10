@@ -20,6 +20,7 @@
   #vignette,#vignette2{position:fixed;inset:-6%;z-index:2;pointer-events:none;background-size:100% 100%;opacity:0;}
   #staticFx{position:fixed;inset:0;z-index:3;pointer-events:none;opacity:0;image-rendering:pixelated;width:100%;height:100%;mix-blend-mode:screen;}
   #redFlash{position:fixed;inset:0;z-index:4;pointer-events:none;background:radial-gradient(ellipse at center,rgba(120,10,10,.55),rgba(20,0,0,.85));opacity:0;transition:opacity .12s;}
+  #dawnFade{position:fixed;inset:0;z-index:9;pointer-events:none;background:radial-gradient(ellipse at 50% 40%,#efe9da,#c9c2ae 70%,#a7a08c);opacity:0;transition:opacity 2.6s ease-in;}
   #crosshair{position:fixed;left:50%;top:50%;width:5px;height:5px;margin:-2px 0 0 -2px;border-radius:60% 40% 55% 45%;background:rgba(232,226,210,.6);z-index:5;pointer-events:none;display:none;}
 
   /* ------- wobbly hand-drawn bubbles ------- */
@@ -83,6 +84,7 @@
 <div id="vignette2"></div>
 <canvas id="staticFx" width="192" height="108"></canvas>
 <div id="redFlash"></div>
+<div id="dawnFade"></div>
 <div id="crosshair"></div>
 
 <div id="hud">
@@ -1238,10 +1240,10 @@ updateMenuBests();
    difficulty
 ========================================================= */
 const DIFFS={
-  easy:     {label:'a bad dream',  tpBase:15,tpVar:6,minD0:32,minD1:15,staticRate:.30,staticDecay:.55,proxRate:.05,drift0:0,  drift1:.4, killDist:1.7,stamMax:130,drain:15,regen:18,glow:1.5,activeFrom:1,flash:1,wisp:true},
-  normal:   {label:'a nightmare',  tpBase:11,tpVar:4,minD0:27,minD1:12,staticRate:.45,staticDecay:.45,proxRate:.07,drift0:0,  drift1:.9, killDist:1.9,stamMax:100,drain:19,regen:14,glow:1.0,activeFrom:1,flash:1},
-  hard:     {label:'a haunting',   tpBase:8.5,tpVar:3,minD0:23,minD1:9.5,staticRate:.62,staticDecay:.36,proxRate:.09,drift0:.2,drift1:1.5,killDist:2.0,stamMax:90, drain:22,regen:12,glow:.45,activeFrom:1,flash:.8},
-  nightmare:{label:'the ink itself',tpBase:6.5,tpVar:2.5,minD0:19,minD1:8,staticRate:.85,staticDecay:.30,proxRate:.12,drift0:.5,drift1:2.2,killDist:2.2,stamMax:80, drain:25,regen:10,glow:0, activeFrom:0,flash:.6},
+  easy:     {label:'a bad dream',  tpBase:15,tpVar:6,minD0:32,minD1:15,staticRate:.30,staticDecay:.55,proxRate:.05,drift0:0,  drift1:.4, killDist:1.7,stamMax:130,drain:15,regen:18,glow:1.5,activeFrom:1,flash:1,wisp:true,escSpeed:4.0},
+  normal:   {label:'a nightmare',  tpBase:11,tpVar:4,minD0:27,minD1:12,staticRate:.45,staticDecay:.45,proxRate:.07,drift0:0,  drift1:.9, killDist:1.9,stamMax:100,drain:19,regen:14,glow:1.0,activeFrom:1,flash:1,escSpeed:4.8},
+  hard:     {label:'a haunting',   tpBase:8.5,tpVar:3,minD0:23,minD1:9.5,staticRate:.62,staticDecay:.36,proxRate:.09,drift0:.2,drift1:1.5,killDist:2.0,stamMax:90, drain:22,regen:12,glow:.45,activeFrom:1,flash:.8,escSpeed:5.2},
+  nightmare:{label:'the ink itself',tpBase:6.5,tpVar:2.5,minD0:19,minD1:8,staticRate:.85,staticDecay:.30,proxRate:.12,drift0:.5,drift1:2.2,killDist:2.2,stamMax:80, drain:25,regen:10,glow:0, activeFrom:0,flash:.6,escSpeed:5.6},
 };
 
 /* =========================================================
@@ -1350,6 +1352,8 @@ function toMenu(){
   document.body.style.cursor='auto';
   drawStatic(0);
   $('vignette').style.opacity=0;$('vignette2').style.opacity=0;
+  const df=$('dawnFade');df.style.transition='none';df.style.opacity=0;
+  requestAnimationFrame(()=>{df.style.transition='';});
 }
 
 function startGame(diffKey){
@@ -1367,6 +1371,9 @@ function startGame(diffKey){
   G.nextPhantom=G.time+rand(20,40);G.phantomT=0;phantom.visible=false;
   G.noise=0;G.noiseWarned=false;
   G.hunt=false;G.huntTime=0;G.huntLost=0;
+  G.escape=false;
+  if(gateGroup){scene.remove(gateGroup);gateGroup=null;}
+  scene.fog.density=.030;scene.fog.color.set(NIGHT);
   G.nextWisp=G.time+10;
   for(const w of wisps){scene.remove(w.spr);w.spr.material.dispose();}
   wisps.length=0;
@@ -1481,12 +1488,84 @@ function tryCollect(){
     G.tpTimer=Math.min(G.tpTimer,rand(1.5,3.5)); // punish teleport soon
   }
   if(G.pages>=6){maskMesh.material.map=maskAngry;maskMesh.material.needsUpdate=true;}
-  if(G.pages>=8){
-    G.winTimer=3.2;
-    showNote('the ink is lifting. hold on.',3);
-  }
+  if(G.pages>=8)startEscape();
   promptPage=null;
   $('prompt').style.display='none';
+}
+
+/* =========================================================
+   the escape gate — a torii of light at the edge of the ink
+========================================================= */
+let gateGroup=null;
+const gatePos=new THREE.Vector3();
+function buildGate(){
+  if(gateGroup){scene.remove(gateGroup);gateGroup=null;}
+  // pick a direction: back toward open ground, away from the map's rim
+  let dir;
+  if(Math.hypot(G.pos.x,G.pos.z)>50)dir=new THREE.Vector3(-G.pos.x,0,-G.pos.z).normalize();
+  else{const a=rand(0,TAU);dir=new THREE.Vector3(Math.cos(a),0,Math.sin(a));}
+  gatePos.copy(G.pos).setY(0).addScaledVector(dir,105);
+  const gr=Math.hypot(gatePos.x,gatePos.z);
+  if(gr>135)gatePos.multiplyScalar(135/gr);
+  gateGroup=new THREE.Group();
+  gateGroup.position.copy(gatePos);
+  gateGroup.rotation.y=Math.atan2(G.pos.x-gatePos.x,G.pos.z-gatePos.z);
+  const glow=new THREE.MeshBasicMaterial({color:0xe8dcae,fog:false});
+  const mk=(geo)=>{ // glowing part + ink outline
+    gateGroup.add(new THREE.Mesh(geo,glow));
+    gateGroup.add(new THREE.Mesh(outlineGeo(geo,.06),inkMat));
+  };
+  for(const sx of[-1.6,1.6]){
+    const pil=new THREE.CylinderGeometry(.2,.26,4.4,7,3);pil.translate(sx,2.2,0);
+    mk(displaceGeo(pil,.08,200+sx));
+  }
+  const beam=new THREE.BoxGeometry(5,.38,.42);beam.translate(0,4.5,0);
+  mk(displaceGeo(beam,.06,203));
+  const beam2=new THREE.BoxGeometry(4.1,.26,.3);beam2.translate(0,3.7,0);
+  mk(displaceGeo(beam2,.05,204));
+  // pillar of pale light rising out of the painting
+  const pillar=new THREE.Mesh(
+    new THREE.CylinderGeometry(2.4,3.2,90,10,1,true),
+    new THREE.MeshBasicMaterial({color:0xf4ecd2,transparent:true,opacity:.13,fog:false,
+      blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide}));
+  pillar.position.y=45;
+  gateGroup.add(pillar);
+  const gl=new THREE.PointLight(0xf0e6c0,30,30,1.6);
+  gl.position.y=3;
+  gateGroup.add(gl);
+  scene.add(gateGroup);
+}
+function startEscape(){
+  G.escape=true;
+  buildGate();
+  // he rises out of the ink behind you, between you and nothing
+  const away=new THREE.Vector3().copy(G.pos).setY(0).sub(gatePos).normalize();
+  G.entPos.copy(G.pos).setY(0).addScaledVector(away,26);
+  entity.position.copy(G.entPos);
+  G.entActive=true;entity.visible=true;
+  maskMesh.material.map=maskAngry;maskMesh.material.needsUpdate=true;
+  G.hunt=true;G.huntTime=Infinity;G.huntLost=0;
+  sting(noteF(-24),.4);
+  pulseSplat();
+  showNote('a gate of light has opened. RUN.',5);
+}
+function startDawn(){
+  G.state='dawn';G.dawnT=2.8;
+  G.hunt=false;G.entActive=false;entity.visible=false;
+  $('dawnFade').style.opacity=1;
+  if(AC){staticGain.gain.value=0;buzzGain.gain.value=0;breathGain.gain.value=0;}
+  drawStatic(0);
+  pageJingle(8);
+}
+function updateDawn(dt){
+  G.dawnT-=dt;
+  scene.fog.density=lerp(scene.fog.density,.006,dt*.8);
+  scene.fog.color.lerp(new THREE.Color(0x8b8878),dt*.8);
+  // drift through the gate
+  const fwd=new THREE.Vector3();camera.getWorldDirection(fwd);
+  G.pos.addScaledVector(fwd.setY(0).normalize(),dt*1.2);
+  camera.position.set(G.pos.x,1.62,G.pos.z);
+  if(G.dawnT<=0)showWin();
 }
 
 /* =========================================================
@@ -1619,7 +1698,7 @@ function update(dt){
     entity.position.y=G.hunt?Math.abs(Math.sin(G.time*7))*.07:Math.sin(G.time*3.1)*.015;
     if(G.hunt){
       // the chase: he closes in whether or not you watch
-      const hs=4.6+aggr()*.9;
+      const hs=G.escape?d.escSpeed:4.6+aggr()*.9;
       if(dist>d.killDist*.7){
         const ux=(G.pos.x-G.entPos.x)/dist,uz=(G.pos.z-G.entPos.z)/dist;
         G.entPos.x+=ux*hs*dt;G.entPos.z+=uz*hs*dt;
@@ -1632,11 +1711,11 @@ function update(dt){
         entity.position.x=G.entPos.x;entity.position.z=G.entPos.z;
       }
       if(visible){
-        G.staticLevel+=dt*d.staticRate*.45; // contact is the real danger now
+        G.staticLevel+=dt*d.staticRate*(G.escape?.28:.45); // contact is the real danger now
         G.huntLost=Math.max(0,G.huntLost-dt*.6);
       }else G.huntLost+=dt;
       G.huntTime-=dt;
-      if(G.huntLost>1.4||G.huntTime<=0){
+      if(!G.escape&&(G.huntLost>1.4||G.huntTime<=0)){
         // lost you between the trees — he melts back into the ink
         G.hunt=false;
         teleportEntity();
@@ -1685,23 +1764,28 @@ function update(dt){
   G.breath=lerp(G.breath||0,breath,Math.min(1,dt*4));
   if(AC)breathGain.gain.value=G.breath*.30;
   G.danger=Math.max(G.staticLevel,G.entActive?clamp(1-dist/22,0,1):0,G.hunt?.85:0);
-  /* ---- win countdown ---- */
-  if(G.winTimer>0){
-    G.winTimer-=dt;
-    G.entActive=false;entity.visible=false;G.staticLevel=Math.min(G.staticLevel,.3);
-    if(G.winTimer<=0){showWin();return;}
+  /* ---- the gate ---- */
+  if(G.escape&&gateGroup){
+    gateGroup.children[gateGroup.children.length-2].rotation.y+=dt*.2; // light pillar slowly turns
+    if(Math.hypot(G.pos.x-gatePos.x,G.pos.z-gatePos.z)<3){startDawn();return;}
   }
   /* ---- audio ties ---- */
   if(G.time>G.nextAmbient&&G.staticLevel<.4)ambientEvent();
-  // ink wisps drift toward the nearest page (easy mode's compass)
-  if(d.wisp&&G.time>(G.nextWisp||0)&&G.pages<8){
-    let best=null,bd=1e9;
-    for(const p of pageMeshes)if(!p.collected){
-      const dd=p.mesh.position.distanceTo(camera.position);
-      if(dd<bd){bd=dd;best=p;}
-    }
-    if(best&&bd>4)spawnWisp(best.mesh.position);
-    G.nextWisp=G.time+rand(10,16);
+  // ink wisps drift toward the nearest page (easy mode's compass),
+  // or toward the gate for everyone during the escape
+  if(G.time>(G.nextWisp||0)){
+    if(G.escape){
+      spawnWisp(gatePos.clone().setY(2.5));
+      G.nextWisp=G.time+rand(5,8);
+    }else if(d.wisp&&G.pages<8){
+      let best=null,bd=1e9;
+      for(const p of pageMeshes)if(!p.collected){
+        const dd=p.mesh.position.distanceTo(camera.position);
+        if(dd<bd){bd=dd;best=p;}
+      }
+      if(best&&bd>4)spawnWisp(best.mesh.position);
+      G.nextWisp=G.time+rand(10,16);
+    }else G.nextWisp=G.time+3;
   }
   updateWisps(dt);
   if(G.time>G.nextPhantom)tryPhantom();
@@ -1768,6 +1852,7 @@ function loop(){
   const dt=Math.min(clock.getDelta(),0.05);
   if(G.state==='playing')update(dt);
   else if(G.state==='dying')updateDying(dt);
+  else if(G.state==='dawn')updateDawn(dt);
   else if(G.state==='menu'){
     // slow menu drift behind the panel
     G.time+=dt;
@@ -1780,7 +1865,7 @@ function loop(){
 loop();
 
 // minimal debug handle (used by automated smoke tests; harmless in play)
-window.SUMI_DEBUG={G,THREE,camera,entity,pageMeshes,pageSpots,teleportEntity,tryCollect,die,setPrompt:p=>{promptPage=p;}};
+window.SUMI_DEBUG={G,THREE,camera,entity,pageMeshes,pageSpots,gatePos,teleportEntity,tryCollect,die,setPrompt:p=>{promptPage=p;}};
 </script>
 </body>
 </html>
