@@ -478,12 +478,13 @@ function spotOn(group,lx,ly,lz,lry=0){
   group.localToWorld(p);
   pageSpots.push({pos:p,ry:group.rotation.y+lry});
 }
+const N_SITES=12;
 function buildLandmarks(){
-  const R=()=>rand(58,122);
+  const R=()=>rand(55,125);
   const baseA=rand(0,TAU);
   const sites=[];
-  for(let i=0;i<8;i++){
-    const a=baseA+i*(TAU/8)+rand(-.25,.25),r=R();
+  for(let i=0;i<N_SITES;i++){
+    const a=baseA+i*(TAU/N_SITES)+rand(-.18,.18),r=R();
     sites.push({x:Math.cos(a)*r,z:Math.sin(a)*r});
   }
   // 1 — torii gate
@@ -602,6 +603,70 @@ function buildLandmarks(){
       colliders.push(colAt(g,i*.85-1.3,0,.5));
     }
     spotOn(g,-.45,.8,.28);
+  }
+  // 9 — temple bell frame
+  {
+    const g=landmarkGroup(sites[8].x,sites[8].z);
+    for(const sx of[-1,1]){
+      const post=new THREE.CylinderGeometry(.11,.15,2.6,6,3);post.translate(sx,1.3,0);
+      inked(g,displaceGeo(post,.07,90),darkWoodMat);
+      colliders.push(colAt(g,sx,0,.4));
+    }
+    const beam=new THREE.BoxGeometry(2.7,.24,.3);beam.translate(0,2.65,0);
+    inked(g,displaceGeo(beam,.05,91),darkWoodMat);
+    const bell=mergeGeos([
+      (()=>{const b=new THREE.CylinderGeometry(.42,.52,.75,9,2);b.translate(0,1.75,0);return b;})(),
+      (()=>{const cap=new THREE.SphereGeometry(.42,9,5,0,TAU,0,Math.PI/2);cap.translate(0,2.12,0);return cap;})(),
+    ]);
+    inked(g,displaceGeo(bell,.05,92),toon(0x4e5548,{flatShading:true}));
+    spotOn(g,-1,1.35,.2);
+  }
+  // 10 — kakashi (scarecrow)
+  {
+    const g=landmarkGroup(sites[9].x,sites[9].z);
+    const pole=new THREE.CylinderGeometry(.06,.09,2.4,5,3);pole.translate(0,1.2,0);
+    inked(g,displaceGeo(pole,.06,100),woodMat);
+    const arms=new THREE.CylinderGeometry(.045,.045,1.9,5,3);
+    arms.rotateZ(Math.PI/2);arms.translate(0,1.85,0);
+    inked(g,displaceGeo(arms,.05,101),woodMat);
+    const skirt=new THREE.ConeGeometry(.5,1.1,7,2);skirt.translate(0,1.15,0);
+    inked(g,displaceGeo(skirt,.14,102),toon(0x6a6353,{flatShading:true}));
+    const head=new THREE.IcosahedronGeometry(.26,1);head.scale(.9,1.1,.9);head.translate(0,2.35,0);
+    inked(g,displaceGeo(head,.08,103),toon(0xb9b2a0,{flatShading:true}));
+    const hat=new THREE.ConeGeometry(.55,.4,7);hat.translate(0,2.68,0);
+    inked(g,displaceGeo(hat,.08,104),toon(0x8a7d5f,{flatShading:true}));
+    colliders.push(colAt(g,0,0,.6));
+    spotOn(g,0,1.5,.42);
+  }
+  // 11 — shimenawa stone (roped sacred rock)
+  {
+    const g=landmarkGroup(sites[10].x,sites[10].z);
+    const rock=new THREE.DodecahedronGeometry(1.5,0);
+    rock.scale(1,.85,1);rock.translate(0,1.15,0);
+    inked(g,displaceGeo(rock,.4,110),stoneMat,.07);
+    const rope=new THREE.TorusGeometry(1.5,.09,6,14);
+    rope.rotateX(Math.PI/2-.12);rope.translate(0,1.35,0);
+    inked(g,displaceGeo(rope,.05,111),toon(0xb8a985));
+    colliders.push(colAt(g,0,0,1.75));
+    spotOn(g,0,1.15,1.45);
+  }
+  // 12 — dead bamboo grove
+  {
+    const g=landmarkGroup(sites[11].x,sites[11].z);
+    for(let i=0;i<7;i++){
+      const a=i*(TAU/7)+rand(-.3,.3),rr=rand(.7,1.6);
+      const h=rand(4.5,6.5);
+      const cane=new THREE.CylinderGeometry(.05,.07,h,5,4);
+      cane.translate(Math.cos(a)*rr,h/2,Math.sin(a)*rr);
+      cane.rotateZ(rand(-.06,.06));
+      inked(g,displaceGeo(cane,.07,120+i),toon(0x6d7a62));
+      colliders.push(colAt(g,Math.cos(a)*rr,Math.sin(a)*rr,.25));
+    }
+    const marker=new THREE.BoxGeometry(.5,1.0,.3);marker.translate(0,.5,0);
+    marker.rotateY(rand(-.3,.3));
+    inked(g,displaceGeo(marker,.08,127),stoneMat);
+    colliders.push(colAt(g,0,0,.5));
+    spotOn(g,0,.72,.18);
   }
 }
 function colAt(group,lx,lz,r){
@@ -751,8 +816,11 @@ function pageTexture(i){
 const pageMeshes=[]; // {mesh,light,spot,idx,collected}
 function createPages(diff){
   clearPages();
+  // the pages hide at 8 of the 12 landmarks, different every run
+  const order=pageSpots.map((_,i)=>i);
+  for(let i=order.length-1;i>0;i--){const j=irand(0,i);[order[i],order[j]]=[order[j],order[i]];}
   for(let i=0;i<8;i++){
-    const spot=pageSpots[i];
+    const spot=pageSpots[order[i]];
     const geo=new THREE.PlaneGeometry(.34,.47);
     // unlit: the page shows its ink exactly; fog still swallows it at distance
     const mat=new THREE.MeshBasicMaterial({
