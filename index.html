@@ -846,7 +846,7 @@ scene.add(phantom);
 /* =========================================================
    procedural audio — everything from oscillators & noise
 ========================================================= */
-let AC=null,master,masterFilter,windGain,staticGain,buzzOsc,buzzGain,droneGains=[],noiseBuf;
+let AC=null,master,masterFilter,windGain,staticGain,buzzOsc,buzzGain,droneGains=[],noiseBuf,breathGain;
 function initAudio(){
   if(AC)return;
   AC=new (window.AudioContext||window.webkitAudioContext)();
@@ -875,6 +875,18 @@ function initAudio(){
   buzzGain=AC.createGain();buzzGain.gain.value=0;
   buzzOsc.connect(buzzGain);buzzGain.connect(master);
   buzzOsc.start();
+  // slow breathing, for when he stands behind you
+  {
+    const src=AC.createBufferSource();src.buffer=noiseBuf;src.loop=true;src.playbackRate.value=.4;
+    const lp=AC.createBiquadFilter();lp.type='lowpass';lp.frequency.value=240;
+    const amp=AC.createGain();amp.gain.value=.5;
+    const lfo=AC.createOscillator();lfo.frequency.value=.38;
+    const lfoG=AC.createGain();lfoG.gain.value=.45;
+    lfo.connect(lfoG);lfoG.connect(amp.gain);
+    breathGain=AC.createGain();breathGain.gain.value=0;
+    src.connect(lp);lp.connect(amp);amp.connect(breathGain);breathGain.connect(master);
+    src.start();lfo.start();
+  }
   // low drones
   for(const f of[47,47.7,71]){
     const o=AC.createOscillator();o.type='sine';o.frequency.value=f;
@@ -1514,6 +1526,15 @@ function update(dt){
   }
   G.staticLevel=clamp(G.staticLevel,0,1);
   if(G.staticLevel>=1){die();}
+  // he breathes when he is right behind you
+  let breath=0;
+  if(G.entActive&&!visible&&dist<8){
+    const fx=-Math.sin(G.yaw),fz=-Math.cos(G.yaw);
+    const tx=(G.entPos.x-G.pos.x)/dist,tz=(G.entPos.z-G.pos.z)/dist;
+    if(fx*tx+fz*tz<-.25)breath=(1-dist/8);
+  }
+  G.breath=lerp(G.breath||0,breath,Math.min(1,dt*4));
+  if(AC)breathGain.gain.value=G.breath*.30;
   G.danger=Math.max(G.staticLevel,G.entActive?clamp(1-dist/22,0,1):0);
   /* ---- win countdown ---- */
   if(G.winTimer>0){
@@ -1545,7 +1566,7 @@ function update(dt){
   if(noteTimer>0){noteTimer-=dt;if(noteTimer<=0)$('note').style.opacity=0;}
   $('stareWarn').style.display=(visible&&G.staticLevel>.45)?'block':'none';
   splatPulse=Math.max(0,splatPulse-dt*1.6);
-  const vg=clamp(G.staticLevel*.95+G.danger*.25+splatPulse*.5,0,1);
+  const vg=clamp(G.staticLevel*.95+G.danger*.25+splatPulse*.5+(G.breath||0)*.18,0,1);
   $('vignette').style.opacity=vg;
   $('vignette').style.transform=`rotate(${Math.sin(G.time*.4)*1.2}deg) scale(${1+G.staticLevel*.04})`;
   $('vignette2').style.opacity=clamp(G.staticLevel*1.2-.25+splatPulse*.6,0,1);
