@@ -1267,11 +1267,18 @@ const G={
   // peripheral hauntings
   nextPhantom:35,phantomT:0,
   noise:0, // how loudly the player has been moving — he listens
+  hunt:false,huntTime:0,huntLost:0,
   built:false,
 };
+function startHunt(){
+  G.hunt=true;G.huntTime=9;G.huntLost=0;
+  sting(noteF(-24),.32);
+  pulseSplat();
+  whoosh(.2);
+}
 function tryPhantom(){
   G.nextPhantom=G.time+rand(25,55)*(1-aggr()*.3);
-  if(G.staticLevel>.35)return;
+  if(G.staticLevel>.35||G.hunt)return;
   // horizontal half-fov in yaw terms, pushed to the very edge of the screen
   const hHalf=Math.atan(Math.tan(camera.fov*Math.PI/360)*camera.aspect);
   for(let t=0;t<8;t++){
@@ -1359,6 +1366,7 @@ function startGame(diffKey){
   G.nextAmbient=G.time+rand(12,25);G.ffDimT=0;G.flashDip=0;G.gust=0;
   G.nextPhantom=G.time+rand(20,40);G.phantomT=0;phantom.visible=false;
   G.noise=0;G.noiseWarned=false;
+  G.hunt=false;G.huntTime=0;G.huntLost=0;
   G.nextWisp=G.time+10;
   for(const w of wisps){scene.remove(w.spr);w.spr.material.dispose();}
   wisps.length=0;
@@ -1607,9 +1615,34 @@ function update(dt){
     dist=Math.hypot(G.entPos.x-G.pos.x,G.entPos.z-G.pos.z);
     visible=entityVisible();
     entity.rotation.y=Math.atan2(G.pos.x-G.entPos.x,G.pos.z-G.entPos.z);
-    // subtle ink shimmer
-    entity.position.y=Math.sin(G.time*3.1)*.015;
-    if(visible){
+    // subtle ink shimmer; a lurching gait while hunting
+    entity.position.y=G.hunt?Math.abs(Math.sin(G.time*7))*.07:Math.sin(G.time*3.1)*.015;
+    if(G.hunt){
+      // the chase: he closes in whether or not you watch
+      const hs=4.6+aggr()*.9;
+      if(dist>d.killDist*.7){
+        const ux=(G.pos.x-G.entPos.x)/dist,uz=(G.pos.z-G.entPos.z)/dist;
+        G.entPos.x+=ux*hs*dt;G.entPos.z+=uz*hs*dt;
+        // he flows around the trees
+        for(const c of treeLOS){
+          const ddx=G.entPos.x-c.x,ddz=G.entPos.z-c.z,rr=c.r+.3;
+          const d2=ddx*ddx+ddz*ddz;
+          if(d2<rr*rr&&d2>1e-6){const dd=Math.sqrt(d2);G.entPos.x=c.x+ddx/dd*rr;G.entPos.z=c.z+ddz/dd*rr;}
+        }
+        entity.position.x=G.entPos.x;entity.position.z=G.entPos.z;
+      }
+      if(visible){
+        G.staticLevel+=dt*d.staticRate*.45; // contact is the real danger now
+        G.huntLost=Math.max(0,G.huntLost-dt*.6);
+      }else G.huntLost+=dt;
+      G.huntTime-=dt;
+      if(G.huntLost>1.4||G.huntTime<=0){
+        // lost you between the trees — he melts back into the ink
+        G.hunt=false;
+        teleportEntity();
+        G.tpTimer=lerp(d.tpBase,d.tpBase*.4,aggr())+rand(0,d.tpVar)+2;
+      }
+    }else if(visible){
       if(!G.everSeenThisSpot){G.everSeenThisSpot=true;if(dist<26)sting(noteF(-19),.22);}
       G.seenTimer+=dt;
       const prox=clamp(1.35-dist/44,.3,1.35);
@@ -1628,7 +1661,9 @@ function update(dt){
       // teleport clock only runs unseen; sprinting noise winds it faster
       G.tpTimer-=dt*(1+G.noise*.9);
       if(G.tpTimer<=0){
-        teleportEntity();
+        // on the last two pages, sometimes he doesn't teleport. he comes.
+        if(G.pages>=6&&Math.random()<.45)startHunt();
+        else teleportEntity();
         G.tpTimer=lerp(d.tpBase,d.tpBase*.4,aggr())+rand(0,d.tpVar);
       }
     }
@@ -1649,7 +1684,7 @@ function update(dt){
   }
   G.breath=lerp(G.breath||0,breath,Math.min(1,dt*4));
   if(AC)breathGain.gain.value=G.breath*.30;
-  G.danger=Math.max(G.staticLevel,G.entActive?clamp(1-dist/22,0,1):0);
+  G.danger=Math.max(G.staticLevel,G.entActive?clamp(1-dist/22,0,1):0,G.hunt?.85:0);
   /* ---- win countdown ---- */
   if(G.winTimer>0){
     G.winTimer-=dt;
