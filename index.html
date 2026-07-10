@@ -73,6 +73,8 @@
   #enso{position:absolute;left:50%;top:50%;transform:translate(-50%,-54%);opacity:.5;pointer-events:none;}
   #menuWrap{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:12px;margin:auto;padding:26px 14px;}
   #menuTip{font-size:12px;opacity:.4;margin-top:10px;}
+  .btn.padSel{background:var(--paper);color:var(--ink);transform:rotate(-1deg) scale(1.04);}
+  .btn.padSel small{opacity:.85;}
   /* compact layout for short screens so nothing collides */
   @media (max-height:760px){
     .panel h1{font-size:min(11vw,64px);}
@@ -151,7 +153,7 @@
     <button class="btn" data-diff="nightmare">the ink itself<small>nightmare — no light, no guide, no mercy</small></button>
     <div class="controls">
       WASD — walk &nbsp;·&nbsp; SHIFT — sprint &nbsp;·&nbsp; MOUSE — look<br>
-      E — take page &nbsp;·&nbsp; F — flashlight<br>
+      E — take page &nbsp;·&nbsp; F — flashlight &nbsp;·&nbsp; gamepad works too<br>
       collect all 8 pages. <span style="color:#c99">do not look at him.</span>
     </div>
     <div id="menuTip">headphones recommended · everything you hear is drawn from noise</div>
@@ -1417,7 +1419,16 @@ if(IS_TOUCH){
 }
 
 /* ---- gamepad ---- */
-const pad={mx:0,mz:0,sprint:false,prev:{}};
+const pad={mx:0,mz:0,sprint:false,prev:{},navPrev:false,menuIdx:1};
+function menuButtons(){return[...document.querySelectorAll('#menu .btn')];}
+function menuHighlight(){
+  menuButtons().forEach((b,i)=>b.classList.toggle('padSel',i===pad.menuIdx));
+}
+function menuNav(dir){
+  const btns=menuButtons();
+  pad.menuIdx=(pad.menuIdx+dir+btns.length)%btns.length;
+  menuHighlight();
+}
 function pollGamepad(dt){
   pad.mx=0;pad.mz=0;pad.sprint=false;
   if(!navigator.getGamepads)return;
@@ -1425,18 +1436,26 @@ function pollGamepad(dt){
   for(const g of navigator.getGamepads())if(g&&g.connected){gp=g;break;}
   if(!gp)return;
   const dz=v=>Math.abs(v||0)>.18?v:0;
+  const bp=i=>!!(gp.buttons[i]&&gp.buttons[i].pressed);
   if(G.state==='playing'){
     pad.mx=dz(gp.axes[0]);pad.mz=dz(gp.axes[1]);
     G.yaw-=dz(gp.axes[2])*dt*2.8;
     G.pitch=clamp(G.pitch-dz(gp.axes[3])*dt*2.2,-1.45,1.45);
     const bv=i=>gp.buttons[i]?gp.buttons[i].value:0;
-    pad.sprint=(gp.buttons[10]&&gp.buttons[10].pressed)||bv(6)>.4||bv(7)>.4;
+    pad.sprint=bp(10)||bv(6)>.4||bv(7)>.4;
   }
-  const edge=i=>{const p=!!(gp.buttons[i]&&gp.buttons[i].pressed),was=pad.prev[i];pad.prev[i]=p;return p&&!was;};
+  if(G.state==='menu'){
+    // d-pad or left stick walks the difficulty list
+    const nav=(bp(13)||(gp.axes[1]||0)>.55)?1:((bp(12)||(gp.axes[1]||0)<-.55)?-1:0);
+    if(nav&&!pad.navPrev)menuNav(nav);
+    pad.navPrev=!!nav;
+    menuHighlight();
+  }
+  const edge=i=>{const p=bp(i),was=pad.prev[i];pad.prev[i]=p;return p&&!was;};
   if(edge(0)){ // A — the "do the thing" button everywhere
     if(G.state==='playing')tryCollect();
     else if(G.state==='intro')endIntro();
-    else if(G.state==='menu')startGame('normal');
+    else if(G.state==='menu')menuButtons()[pad.menuIdx].click();
     else if(G.state==='dead')$('retryBtn').click();
     else if(G.state==='win')$('againBtn').click();
     else if(G.state==='paused')$('resumeBtn').click();
