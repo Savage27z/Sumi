@@ -52,7 +52,8 @@
   #introSkip{position:fixed;bottom:26px;right:26px;font-size:13px;opacity:.45;}
 
   /* ------- fullscreen panels ------- */
-  .panel{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:radial-gradient(ellipse at 50% 38%,#141726 0%,#0a0b12 62%,#050609 100%);text-align:center;}
+  .panel{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;background:radial-gradient(ellipse at 50% 38%,#141726 0%,#0a0b12 62%,#050609 100%);text-align:center;overflow-y:auto;}
+  .panelWrap{margin:auto;display:flex;flex-direction:column;align-items:center;gap:14px;padding:26px 14px;}
   .panel h1{font-size:min(15vw,110px);letter-spacing:.18em;color:var(--paper);text-shadow:0 0 24px rgba(150,160,200,.25),3px 4px 0 #000;font-weight:700;position:relative;}
   .panel .sub{font-size:17px;opacity:.72;margin-top:-10px;letter-spacing:.35em;}
   .btn{
@@ -70,15 +71,28 @@
   .btn:hover small{opacity:.85;}
   #menu .controls{font-size:14px;opacity:.65;line-height:1.9;margin-top:12px;}
   #enso{position:absolute;left:50%;top:50%;transform:translate(-50%,-54%);opacity:.5;pointer-events:none;}
-  #menuWrap{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:12px;}
+  #menuWrap{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:12px;margin:auto;padding:26px 14px;}
+  #menuTip{font-size:12px;opacity:.4;margin-top:10px;}
+  /* compact layout for short screens so nothing collides */
+  @media (max-height:760px){
+    .panel h1{font-size:min(11vw,64px);}
+    .panel .sub{font-size:14px;margin-top:-4px;letter-spacing:.25em;}
+    #menuWrap,.panelWrap{gap:8px;padding:16px 12px;}
+    .btn{font-size:17px;min-width:220px;padding:.32em 1.1em;}
+    .btn small{font-size:11px;}
+    #menu .controls{font-size:12px;line-height:1.6;margin-top:6px;}
+    #menuTip{margin-top:4px;}
+  }
+  @media (max-height:460px){
+    .panel h1{font-size:38px;}
+    #enso{display:none;}
+  }
   #dead,#win,#paused{display:none;}
   #dead h1{color:#c9b6b6;font-size:min(11vw,84px);}
   #dead .stats,#win .stats{font-size:17px;opacity:.8;line-height:1.9;}
   #win{background:radial-gradient(ellipse at 50% 30%,#3d3f4e 0%,#1d1f2c 55%,#0c0d15 100%);}
   #win h1{font-size:min(11vw,84px);color:#efe9da;}
   #paused{background:rgba(5,6,10,.86);}
-  #tip{position:fixed;bottom:12px;width:100%;text-align:center;font-size:12px;opacity:.4;z-index:11;pointer-events:none;}
-
   /* ------- touch controls ------- */
   .touchOnly{display:none;}
   body.touch .touchOnly{display:flex;}
@@ -131,35 +145,35 @@
     <h1>SUMI</h1>
     <div class="sub">墨 &nbsp;a sumi-e nightmare</div>
     <div style="height:10px"></div>
-    <button class="btn" data-diff="easy">a bad dream<small>easy — he is patient</small></button>
-    <button class="btn" data-diff="normal">a nightmare<small>normal — he is hungry</small></button>
-    <button class="btn" data-diff="hard">a haunting<small>hard — he is close</small></button>
-    <button class="btn" data-diff="nightmare">the ink itself<small>nightmare — no light will save you</small></button>
+    <button class="btn" data-diff="easy">a bad dream<small>easy — he is patient · wisps lead you to pages</small></button>
+    <button class="btn" data-diff="normal">a nightmare<small>normal — he is hungry · wisps come rarely</small></button>
+    <button class="btn" data-diff="hard">a haunting<small>hard — he is close · find the pages yourself</small></button>
+    <button class="btn" data-diff="nightmare">the ink itself<small>nightmare — no light, no guide, no mercy</small></button>
     <div class="controls">
       WASD — walk &nbsp;·&nbsp; SHIFT — sprint &nbsp;·&nbsp; MOUSE — look<br>
       E — take page &nbsp;·&nbsp; F — flashlight<br>
       collect all 8 pages. <span style="color:#c99">do not look at him.</span>
     </div>
+    <div id="menuTip">headphones recommended · everything you hear is drawn from noise</div>
   </div>
 </div>
 
-<div id="dead" class="panel">
+<div id="dead" class="panel"><div class="panelWrap">
   <h1>THE INK TAKES YOU</h1>
   <div class="stats" id="deadStats"></div>
   <button class="btn" id="retryBtn">try again<small>the forest resets. he remembers.</small></button>
-</div>
+</div></div>
 
-<div id="win" class="panel">
+<div id="win" class="panel"><div class="panelWrap">
   <h1>DAWN</h1>
   <div class="stats" id="winStats"></div>
   <button class="btn" id="againBtn">return to the painting</button>
-</div>
+</div></div>
 
-<div id="paused" class="panel">
+<div id="paused" class="panel"><div class="panelWrap">
   <h1 style="font-size:44px">the brush rests</h1>
   <button class="btn" id="resumeBtn">continue</button>
-</div>
-<div id="tip">SUMI — headphones recommended · everything you hear is drawn from noise</div>
+</div></div>
 
 <script type="importmap">
 {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"}}
@@ -1270,8 +1284,8 @@ updateMenuBests();
    difficulty
 ========================================================= */
 const DIFFS={
-  easy:     {label:'a bad dream',  tpBase:15,tpVar:6,minD0:32,minD1:15,staticRate:.30,staticDecay:.55,proxRate:.05,drift0:0,  drift1:.4, killDist:1.7,stamMax:130,drain:15,regen:18,glow:1.5,activeFrom:1,flash:1,wisp:true,escSpeed:4.0},
-  normal:   {label:'a nightmare',  tpBase:11,tpVar:4,minD0:27,minD1:12,staticRate:.45,staticDecay:.45,proxRate:.07,drift0:0,  drift1:.9, killDist:1.9,stamMax:100,drain:19,regen:14,glow:1.0,activeFrom:1,flash:1,escSpeed:4.8},
+  easy:     {label:'a bad dream',  tpBase:15,tpVar:6,minD0:32,minD1:15,staticRate:.30,staticDecay:.55,proxRate:.05,drift0:0,  drift1:.4, killDist:1.7,stamMax:130,drain:15,regen:18,glow:1.5,activeFrom:1,flash:1,wispEvery:[9,14],escSpeed:4.0},
+  normal:   {label:'a nightmare',  tpBase:11,tpVar:4,minD0:27,minD1:12,staticRate:.45,staticDecay:.45,proxRate:.07,drift0:0,  drift1:.9, killDist:1.9,stamMax:100,drain:19,regen:14,glow:1.0,activeFrom:1,flash:1,wispEvery:[20,30],escSpeed:4.8},
   hard:     {label:'a haunting',   tpBase:8.5,tpVar:3,minD0:23,minD1:9.5,staticRate:.62,staticDecay:.36,proxRate:.09,drift0:.2,drift1:1.5,killDist:2.0,stamMax:90, drain:22,regen:12,glow:.45,activeFrom:1,flash:.8,escSpeed:5.2},
   nightmare:{label:'the ink itself',tpBase:6.5,tpVar:2.5,minD0:19,minD1:8,staticRate:.85,staticDecay:.30,proxRate:.12,drift0:.5,drift1:2.2,killDist:2.2,stamMax:80, drain:25,regen:10,glow:0, activeFrom:0,flash:.6,escSpeed:5.6},
 };
@@ -1493,7 +1507,7 @@ function startGame(diffKey){
   G.escape=false;
   if(gateGroup){scene.remove(gateGroup);gateGroup=null;}
   scene.fog.density=.030;scene.fog.color.set(NIGHT);
-  G.nextWisp=G.time+10;
+  G.nextWisp=G.time+(G.diff.wispEvery?6:10); // guided modes meet their first wisp early
   for(const w of wisps){scene.remove(w.spr);w.spr.material.dispose();}
   wisps.length=0;
   G.entActive=G.diff.activeFrom===0;
@@ -1521,7 +1535,10 @@ function endIntro(){
   if(G.state!=='intro')return;
   G.state='playing';
   $('intro').style.display='none';
-  showNote(G.diffKey==='nightmare'?'he is already awake.':'collect the 8 pages. do not look at him.',5);
+  showNote(G.diffKey==='nightmare'?'he is already awake.'
+    :G.diffKey==='easy'?'collect the 8 pages. the pale wisps know where they sleep.'
+    :G.diffKey==='hard'?'collect the 8 pages. no one will show you where.'
+    :'collect the 8 pages. do not look at him.',5);
 }
 function updateIntro(dt){
   G.time+=dt;
@@ -1931,14 +1948,14 @@ function update(dt){
     if(G.escape){
       spawnWisp(gatePos.clone().setY(2.5));
       G.nextWisp=G.time+rand(5,8);
-    }else if(d.wisp&&G.pages<8){
+    }else if(d.wispEvery&&G.pages<8){
       let best=null,bd=1e9;
       for(const p of pageMeshes)if(!p.collected){
         const dd=p.mesh.position.distanceTo(camera.position);
         if(dd<bd){bd=dd;best=p;}
       }
       if(best&&bd>4)spawnWisp(best.mesh.position);
-      G.nextWisp=G.time+rand(10,16);
+      G.nextWisp=G.time+rand(d.wispEvery[0],d.wispEvery[1]);
     }else G.nextWisp=G.time+3;
   }
   updateWisps(dt);
