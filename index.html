@@ -838,6 +838,10 @@ let maskMesh;
 }
 entity.visible=false;
 scene.add(entity);
+// the phantom: a copy of him that was never really there
+const phantom=entity.clone();
+phantom.visible=false;
+scene.add(phantom);
 
 /* =========================================================
    procedural audio — everything from oscillators & noise
@@ -1137,8 +1141,32 @@ const G={
   nextBeat:0,dieTimer:0,winTimer:-1,
   // ambient fake-outs
   nextAmbient:15,ffFade:1,ffDimT:0,flashDip:0,gust:0,
+  // peripheral hauntings
+  nextPhantom:35,phantomT:0,
   built:false,
 };
+function tryPhantom(){
+  G.nextPhantom=G.time+rand(25,55)*(1-aggr()*.3);
+  if(G.staticLevel>.35)return;
+  // horizontal half-fov in yaw terms, pushed to the very edge of the screen
+  const hHalf=Math.atan(Math.tan(camera.fov*Math.PI/360)*camera.aspect);
+  for(let t=0;t<8;t++){
+    const side=Math.random()<.5?1:-1;
+    const a=G.yaw+side*hHalf*rand(.88,1.02);
+    const r=rand(8,15);
+    const x=G.pos.x-Math.sin(a)*r,z=G.pos.z-Math.cos(a)*r;
+    let ok=true;
+    for(const c of colliders)if(Math.hypot(x-c.x,z-c.z)<c.r+.6){ok=false;break;}
+    if(!ok)continue;
+    phantom.position.set(x,0,z);
+    phantom.rotation.y=Math.atan2(G.pos.x-x,G.pos.z-z);
+    phantom.visible=true;
+    G.phantomT=rand(.3,.45);
+    G.staticLevel=Math.min(1,G.staticLevel+.05);
+    whoosh(.07);
+    return;
+  }
+}
 function ambientEvent(){
   const roll=Math.random();
   if(roll<.28)distantKoto();
@@ -1205,6 +1233,7 @@ function startGame(diffKey){
   G.stamina=G.diff.stamMax;G.exhausted=false;
   G.staticLevel=0;G.danger=0;G.seenTimer=0;G.dieTimer=0;G.winTimer=-1;
   G.nextAmbient=G.time+rand(12,25);G.ffDimT=0;G.flashDip=0;G.gust=0;
+  G.nextPhantom=G.time+rand(20,40);G.phantomT=0;phantom.visible=false;
   G.entActive=G.diff.activeFrom===0;
   G.tpTimer=G.entActive?rand(4,8):999;
   if(G.entActive)teleportEntity(true);
@@ -1489,6 +1518,8 @@ function update(dt){
   }
   /* ---- audio ties ---- */
   if(G.time>G.nextAmbient&&G.staticLevel<.4)ambientEvent();
+  if(G.time>G.nextPhantom)tryPhantom();
+  if(G.phantomT>0){G.phantomT-=dt;if(G.phantomT<=0)phantom.visible=false;}
   G.gust=Math.max(0,G.gust-dt*.5);
   if(AC){
     windGain.gain.value=.045+.03*Math.sin(G.time*.31)+.02*Math.sin(G.time*.13)+G.danger*.05+G.gust*.12;
