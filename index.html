@@ -1322,7 +1322,39 @@ addEventListener('keydown',e=>{
   if(e.code==='KeyE')tryCollect();
   if(['ArrowUp','ArrowDown','Space'].includes(e.code))e.preventDefault();
 });
-addEventListener('mousedown',()=>{if(G.state==='intro')endIntro();});
+addEventListener('mousedown',()=>{if(G.state==='intro')endIntro();if(AC&&AC.state==='suspended')AC.resume();});
+
+/* ---- gamepad ---- */
+const pad={mx:0,mz:0,sprint:false,prev:{}};
+function pollGamepad(dt){
+  pad.mx=0;pad.mz=0;pad.sprint=false;
+  if(!navigator.getGamepads)return;
+  let gp=null;
+  for(const g of navigator.getGamepads())if(g&&g.connected){gp=g;break;}
+  if(!gp)return;
+  const dz=v=>Math.abs(v||0)>.18?v:0;
+  if(G.state==='playing'){
+    pad.mx=dz(gp.axes[0]);pad.mz=dz(gp.axes[1]);
+    G.yaw-=dz(gp.axes[2])*dt*2.8;
+    G.pitch=clamp(G.pitch-dz(gp.axes[3])*dt*2.2,-1.45,1.45);
+    const bv=i=>gp.buttons[i]?gp.buttons[i].value:0;
+    pad.sprint=(gp.buttons[10]&&gp.buttons[10].pressed)||bv(6)>.4||bv(7)>.4;
+  }
+  const edge=i=>{const p=!!(gp.buttons[i]&&gp.buttons[i].pressed),was=pad.prev[i];pad.prev[i]=p;return p&&!was;};
+  if(edge(0)){ // A — the "do the thing" button everywhere
+    if(G.state==='playing')tryCollect();
+    else if(G.state==='intro')endIntro();
+    else if(G.state==='menu')startGame('normal');
+    else if(G.state==='dead')$('retryBtn').click();
+    else if(G.state==='win')$('againBtn').click();
+    else if(G.state==='paused')$('resumeBtn').click();
+  }
+  if(edge(2)&&G.state==='playing')flashOn=!flashOn; // X — flashlight
+  if(edge(9)){ // start — pause / resume
+    if(G.state==='playing'){G.state='paused';$('paused').style.display='flex';document.body.style.cursor='auto';}
+    else if(G.state==='paused')$('resumeBtn').click();
+  }
+}
 addEventListener('keyup',e=>keys[e.code]=false);
 document.addEventListener('mousemove',e=>{
   if(G.state!=='playing'||document.pointerLockElement!==document.body)return;
@@ -1671,8 +1703,9 @@ function update(dt){
   if(keys.KeyS||keys.ArrowDown)mz+=1;
   if(keys.KeyA||keys.ArrowLeft)mx-=1;
   if(keys.KeyD||keys.ArrowRight)mx+=1;
+  mx+=pad.mx;mz+=pad.mz;
   const moving=(mx||mz);
-  const wantSprint=(keys.ShiftLeft||keys.ShiftRight)&&moving&&!G.exhausted;
+  const wantSprint=(keys.ShiftLeft||keys.ShiftRight||pad.sprint)&&moving&&!G.exhausted;
   if(wantSprint){G.stamina-=d.drain*dt;if(G.stamina<=0){G.stamina=0;G.exhausted=true;}}
   else{G.stamina+=d.regen*dt;if(G.stamina>d.stamMax)G.stamina=d.stamMax;if(G.exhausted&&G.stamina>d.stamMax*.35)G.exhausted=false;}
   const speed=wantSprint?7.0:(G.exhausted?3.0:4.3);
@@ -1894,6 +1927,7 @@ function updateDying(dt){
 function loop(){
   requestAnimationFrame(loop);
   const dt=Math.min(clock.getDelta(),0.05);
+  pollGamepad(dt);
   if(G.state==='playing')update(dt);
   else if(G.state==='dying')updateDying(dt);
   else if(G.state==='dawn')updateDawn(dt);
