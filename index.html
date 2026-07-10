@@ -47,6 +47,9 @@
   #prompt{position:absolute;left:50%;bottom:19%;transform:translateX(-50%);font-size:19px;display:none;}
   #note{position:absolute;left:50%;bottom:31%;transform:translateX(-50%) rotate(-1deg);font-size:20px;max-width:560px;text-align:center;opacity:0;transition:opacity .5s;color:#efe9da;}
   #stareWarn{position:absolute;left:50%;top:16%;transform:translateX(-50%);font-size:22px;color:#d99;display:none;animation:wob .6s ease-in-out infinite;}
+  #intro{position:fixed;inset:0;z-index:7;display:none;align-items:center;justify-content:center;pointer-events:none;background:transparent;}
+  #introText{font-size:min(9vw,62px);letter-spacing:.14em;color:var(--paper);text-shadow:2px 3px 0 #000,0 0 26px rgba(160,170,210,.3);opacity:0;transition:opacity .7s;transform:rotate(-.8deg);}
+  #introSkip{position:fixed;bottom:26px;right:26px;font-size:13px;opacity:.45;}
 
   /* ------- fullscreen panels ------- */
   .panel{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:radial-gradient(ellipse at 50% 38%,#141726 0%,#0a0b12 62%,#050609 100%);text-align:center;}
@@ -86,6 +89,8 @@
 <div id="redFlash"></div>
 <div id="dawnFade"></div>
 <div id="crosshair"></div>
+
+<div id="intro"><div id="introText"></div><div id="introSkip">press any key to skip</div></div>
 
 <div id="hud">
   <div id="pagesBubble" class="bubble wobble">pages: <span id="pageCount">0</span>/8<small id="pagesHint">the trees are keeping them</small></div>
@@ -1312,10 +1317,12 @@ function ambientEvent(){
 const keys={};
 addEventListener('keydown',e=>{
   keys[e.code]=true;
+  if(G.state==='intro'){endIntro();return;}
   if(e.code==='KeyF'&&G.state==='playing'){flashOn=!flashOn;}
   if(e.code==='KeyE')tryCollect();
   if(['ArrowUp','ArrowDown','Space'].includes(e.code))e.preventDefault();
 });
+addEventListener('mousedown',()=>{if(G.state==='intro')endIntro();});
 addEventListener('keyup',e=>keys[e.code]=false);
 document.addEventListener('mousemove',e=>{
   if(G.state!=='playing'||document.pointerLockElement!==document.body)return;
@@ -1323,7 +1330,8 @@ document.addEventListener('mousemove',e=>{
   G.pitch=clamp(G.pitch-e.movementY*0.0021,-1.45,1.45);
 });
 document.addEventListener('pointerlockchange',()=>{
-  if(document.pointerLockElement!==document.body&&G.state==='playing'){
+  if(document.pointerLockElement!==document.body&&(G.state==='playing'||G.state==='intro')){
+    if(G.state==='intro')endIntro();
     G.state='paused';
     $('paused').style.display='flex';
     document.body.style.cursor='auto';
@@ -1391,9 +1399,43 @@ function startGame(diffKey){
   $('pagesHint').textContent='the trees are keeping them';
   document.body.style.cursor='none';
   lockPointer();
-  G.state='playing';
-  showNote(diffKey==='nightmare'?'he is already awake.':'collect the 8 pages. do not look at him.',5);
+  // the brush lowers you into the painting
+  G.state='intro';G.introT=5.4;G.introPhase=-1;
+  G.tpTimer+=6; // he waits for the ink to settle
+  $('intro').style.display='flex';
   pluck(noteF(0),0,.3);pluck(noteF(7),.25,.25);
+}
+const INTRO_LINES=['S U M I','eight pages are missing','do not look at him'];
+function endIntro(){
+  if(G.state!=='intro')return;
+  G.state='playing';
+  $('intro').style.display='none';
+  showNote(G.diffKey==='nightmare'?'he is already awake.':'collect the 8 pages. do not look at him.',5);
+}
+function updateIntro(dt){
+  G.time+=dt;
+  G.introT-=dt;
+  const t=5.4-G.introT;
+  const phase=t<1.8?0:(t<3.6?1:2);
+  if(phase!==G.introPhase){
+    G.introPhase=phase;
+    const el=$('introText');
+    el.style.opacity=0;
+    setTimeout(()=>{el.textContent=INTRO_LINES[phase];el.style.opacity=1;},220);
+  }
+  // a slow, dreamlike drift forward
+  G.pos.x+=-Math.sin(G.yaw)*1.1*dt;
+  G.pos.z+=-Math.cos(G.yaw)*1.1*dt;
+  for(const c of colliders){
+    const dx=G.pos.x-c.x,dz=G.pos.z-c.z,rr=c.r+.35,d2=dx*dx+dz*dz;
+    if(d2<rr*rr&&d2>1e-6){const dd=Math.sqrt(d2);G.pos.x=c.x+dx/dd*rr;G.pos.z=c.z+dz/dd*rr;}
+  }
+  G.bob+=dt*2.1;
+  camera.position.set(G.pos.x,1.62+Math.sin(G.bob)*.03,G.pos.z);
+  camera.rotation.order='YXZ';
+  camera.rotation.set(0,G.yaw,Math.sin(G.time*1.3)*.004);
+  updateFireflies(dt);
+  if(G.introT<=0)endIntro();
 }
 
 /* =========================================================
@@ -1816,7 +1858,9 @@ function update(dt){
   $('vignette2').style.opacity=clamp(G.staticLevel*1.2-.25+splatPulse*.6,0,1);
   $('vignette2').style.transform=`rotate(${-Math.sin(G.time*.53)*1.5}deg) scale(${1.02+G.staticLevel*.06})`;
   drawStatic(G.staticLevel*.85);
-  /* ---- fireflies ---- */
+  updateFireflies(dt);
+}
+function updateFireflies(dt){
   const fp=fireflies.geometry.attributes.position;
   for(let i=0;i<ffPhase.length;i++){
     fp.setY(i,ffBase[i*3+1]+Math.sin(G.time*.8+ffPhase[i])*.4);
@@ -1853,6 +1897,7 @@ function loop(){
   if(G.state==='playing')update(dt);
   else if(G.state==='dying')updateDying(dt);
   else if(G.state==='dawn')updateDawn(dt);
+  else if(G.state==='intro')updateIntro(dt);
   else if(G.state==='menu'){
     // slow menu drift behind the panel
     G.time+=dt;
